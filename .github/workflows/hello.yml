@@ -1,0 +1,19 @@
+
+name: My First Workflow
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  hello:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Show a message
+        run: echo "My DevSecOps journey starts here!"
+
+      - name: Check the environment
+        run: |
+          echo "Running on GitHub Actions"
+          git --version
