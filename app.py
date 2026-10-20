@@ -1,7 +1,4 @@
 
-user_input = input("Enter an expression: ")
+user_input = input("Enter a name: ")
 
-# Intentionally vulnerable: lab exercise only.
-result = eval(user_input)
-
-print(result)
+print(f"Hello, {user_input}!")
