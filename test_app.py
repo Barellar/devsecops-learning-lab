@@ -8,6 +8,3 @@ def test_greet_returns_name():
 
 def test_greet_handles_empty_name():
     assert greet("") == "Hello, !"
-
-
-eval(user_input)
