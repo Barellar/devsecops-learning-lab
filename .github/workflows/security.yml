@@ -5,7 +5,6 @@ on:
   pull_request:
   workflow_dispatch:
 
-# Top-level global permission block set to absolute zero
 permissions: {}
 
 jobs:
@@ -29,6 +28,101 @@ jobs:
       - name: Run tests
         run: python -m pytest -v
 
+  sast:
+    name: Static Application Security Testing
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Semgrep
+        run: python -m pip install semgrep
+
+      - name: Scan source code
+        run: |
+          semgrep scan \
+            --config .semgrep.yml \
+            --json \
+            --output semgrep-report.json \
+            --error .
+
+      - name: Upload SAST report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-report
+          path: semgrep-report.json
+          retention-days: 14
+
+  secret-scan:
+    name: Secret Detection
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Scan working tree with Gitleaks
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/path" \
+            zricethezav/gitleaks:v8.24.2 \
+            detect \
+            --source=/path \
+            --no-git \
+            --redact \
+            --report-format=json \
+            --report-path=/path/gitleaks-report.json \
+            --exit-code=1
+
+      - name: Upload secret scan report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-report
+          path: gitleaks-report.json
+          retention-days: 14
+
+  dependency-scan:
+    name: Dependency Vulnerability Scan (SCA)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pip-audit
+        run: python -m pip install pip-audit
+
+      - name: Audit dependencies
+        run: |
+          pip-audit \
+            -r requirements.txt \
+            --format=json \
+            --output=pip-audit-report.json
+
+      - name: Upload dependency report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-audit-report
+          path: pip-audit-report.json
+          retention-days: 14
+
   container-security:
     name: Container Build & Vulnerability Gate
     runs-on: ubuntu-latest
@@ -38,12 +132,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 1. Build the local image asset
       - name: Build local Docker image
         run: |
           docker build -t local-app-test:${{ github.sha }} .
 
-      # 2. Generate SBOM Report
       - name: Generate CycloneDX SBOM
         uses: aquasecurity/trivy-action@master
         with:
@@ -51,7 +143,6 @@ jobs:
           format: 'cyclonedx'
           output: 'sbom.json'
 
-      # 3. Retain SBOM as downloadable file
       - name: Upload SBOM Artifact
         if: always()
         uses: actions/upload-artifact@v4
@@ -60,7 +151,6 @@ jobs:
           path: sbom.json
           retention-days: 14
 
-      # 4. Enforce Severity Gates
       - name: Run Trivy Severity Gate
         uses: aquasecurity/trivy-action@master
         with:
