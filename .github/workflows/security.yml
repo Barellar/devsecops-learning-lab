@@ -16,10 +16,10 @@ jobs:
       contents: read
     steps:
       - name: Checkout code
-        uses: actions/checkout@eef6142ffa2459e45d68f1421740ecae869322eb # pinned to v4.2.1
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@f67e240f2d9c339b91411a56133965ba5c274c81 # pinned to v5.3.0
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
@@ -36,16 +36,16 @@ jobs:
       contents: read
     steps:
       - name: Checkout code
-        uses: actions/checkout@eef6142ffa2459e45d68f1421740ecae869322eb # pinned to v4.2.1
+        uses: actions/checkout@v4
 
       # 1. Build the local image asset
       - name: Build local Docker image
         run: |
           docker build -t local-app-test:${{ github.sha }} .
 
-      # 2. Generate SBOM Report (Requirement 1)
+      # 2. Generate SBOM Report
       - name: Generate CycloneDX SBOM
-        uses: aquasecurity/trivy-action@18f289c8728a055050473a21648a73562635607b # pinned to v0.28.0
+        uses: aquasecurity/trivy-action@master
         with:
           image-ref: 'local-app-test:${{ github.sha }}'
           format: 'cyclonedx'
@@ -54,18 +54,17 @@ jobs:
       # 3. Retain SBOM as downloadable file
       - name: Upload SBOM Artifact
         if: always()
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea2ffd40d1f5c4db881ee42a1 # pinned to v4.4.3
+        uses: actions/upload-artifact@v4
         with:
           name: app-sbom-report
           path: sbom.json
           retention-days: 14
 
-      # 4. Enforce Severity Gates (Requirement 2)
-      # Blocks the pipeline if any HIGH or CRITICAL issues are discovered
+      # 4. Enforce Severity Gates
       - name: Run Trivy Severity Gate
-        uses: aquasecurity/trivy-action@18f289c8728a055050473a21648a73562635607b # pinned to v0.28.0
+        uses: aquasecurity/trivy-action@master
         with:
           image-ref: 'local-app-test:${{ github.sha }}'
           format: 'table'
           severity: 'HIGH,CRITICAL'
-          exit-code: '1' # Forces step failure when target vulnerabilities match
+          exit-code: '1'
