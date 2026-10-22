@@ -2,9 +2,7 @@ name: DevSecOps Pipeline
 
 on:
   push:
-    branches: [ "main" ]
   pull_request:
-    branches: [ "main" ]
   workflow_dispatch:
 
 # Top-level global permission block set to absolute zero
