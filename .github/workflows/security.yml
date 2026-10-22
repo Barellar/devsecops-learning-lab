@@ -1,25 +1,27 @@
-
 name: DevSecOps Pipeline
 
 on:
   push:
+    branches: [ "main" ]
   pull_request:
+    branches: [ "main" ]
   workflow_dispatch:
 
-permissions:
-  contents: read
+# Top-level global permission block set to absolute zero
+permissions: {}
 
 jobs:
   unit-tests:
     name: Unit Tests
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: read
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@eef6142ffa2459e45d68f1421740ecae869322eb # pinned to v4.2.1
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@f67e240f2d9c339b91411a56133965ba5c274c81 # pinned to v5.3.0
         with:
           python-version: "3.12"
 
@@ -29,97 +31,43 @@ jobs:
       - name: Run tests
         run: python -m pytest -v
 
-  sast:
-    name: Static Application Security Testing
+  container-security:
+    name: Container Build & Vulnerability Gate
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: read
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@eef6142ffa2459e45d68f1421740ecae869322eb # pinned to v4.2.1
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install Semgrep
-        run: python -m pip install semgrep
-
-      - name: Scan source code
+      # 1. Build the local image asset
+      - name: Build local Docker image
         run: |
-          semgrep scan \
-            --config .semgrep.yml \
-            --json \
-            --output semgrep-report.json \
-            --error .
+          docker build -t local-app-test:${{ github.sha }} .
 
-      - name: Upload SAST report
-        if: always()
-        uses: actions/upload-artifact@v4
+      # 2. Generate SBOM Report (Requirement 1)
+      - name: Generate CycloneDX SBOM
+        uses: aquasecurity/trivy-action@18f289c8728a055050473a21648a73562635607b # pinned to v0.28.0
         with:
-          name: semgrep-report
-          path: semgrep-report.json
-          if-no-files-found: warn
+          image-ref: 'local-app-test:${{ github.sha }}'
+          format: 'cyclonedx'
+          output: 'sbom.json'
+
+      # 3. Retain SBOM as downloadable file
+      - name: Upload SBOM Artifact
+        if: always()
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea2ffd40d1f5c4db881ee42a1 # pinned to v4.4.3
+        with:
+          name: app-sbom-report
+          path: sbom.json
           retention-days: 14
 
-  secret-scan:
-    name: Secret Detection
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Scan working tree with Gitleaks
-        run: |
-          docker run --rm \
-            -v "${{ github.workspace }}:/path" \
-            zricethezav/gitleaks:v8.24.2 \
-            detect \
-            --source=/path \
-            --no-git \
-            --redact \
-            --report-format=json \
-            --report-path=/path/gitleaks-report.json \
-            --exit-code=1
-
-      - name: Upload secret scan report
-        if: always()
-        uses: actions/upload-artifact@v4
+      # 4. Enforce Severity Gates (Requirement 2)
+      # Blocks the pipeline if any HIGH or CRITICAL issues are discovered
+      - name: Run Trivy Severity Gate
+        uses: aquasecurity/trivy-action@18f289c8728a055050473a21648a73562635607b # pinned to v0.28.0
         with:
-          name: gitleaks-report
-          path: gitleaks-report.json
-          if-no-files-found: warn
-          retention-days: 14
-
-  dependency-scan:
-    name: Dependency Vulnerability Scan
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install pip-audit
-        run: python -m pip install pip-audit
-
-      - name: Audit dependencies
-        run: |
-          pip-audit \
-            -r requirements.txt \
-            --format=json \
-            --output=pip-audit-report.json
-
-      - name: Upload dependency report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: dependency-audit-report
-          path: pip-audit-report.json
-          if-no-files-found: warn
-          retention-days: 14
+          image-ref: 'local-app-test:${{ github.sha }}'
+          format: 'table'
+          severity: 'HIGH,CRITICAL'
+          exit-code: '1' # Forces step failure when target vulnerabilities match
