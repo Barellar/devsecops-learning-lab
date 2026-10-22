@@ -1,0 +1,8 @@
+
+rules:
+  - id: python-dangerous-eval
+    languages:
+      - python
+    severity: ERROR
+    message: "Avoid eval() on user-controlled input."
+    pattern: eval(...)
