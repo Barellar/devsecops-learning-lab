@@ -1,0 +1,10 @@
+version: '3.8'
+
+services:
+  secure-app:
+    image: ghcr.io/${GITHUB_REPOSITORY_LOWER}:latest
+    ports:
+      - "80:5000" # Map public port 80 to Flask container port 5000
+    restart: always
+    environment:
+      - FLASK_ENV=production
